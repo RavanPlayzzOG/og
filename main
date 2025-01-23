@@ -1,0 +1,139 @@
+#!/bin/bash
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Clear the screen
+clear
+
+# Check if the script is run as root
+if [ "$EUID" -ne 0 ]; then
+  echo -e "${RED}Please run this script as root.${NC}"
+  exit 1
+fi
+
+# Define the ASCII art
+ascii_art="
+    
+██████╗░░█████╗░██╗░░░██╗░█████╗░███╗░░██╗
+██╔══██╗██╔══██╗██║░░░██║██╔══██╗████╗░██║
+██████╔╝███████║╚██╗░██╔╝███████║██╔██╗██║
+██╔══██╗██╔══██║░╚████╔╝░██╔══██║██║╚████║
+██║░░██║██║░░██║░░╚██╔╝░░██║░░██║██║░╚███║
+╚═╝░░╚═╝╚═╝░░╚═╝░░░╚═╝░░░╚═╝░░╚═╝╚═╝░░╚══╝
+                                               
+"
+
+echo -e "${CYAN}$ascii_art${NC}"
+
+echo_message "* Installing Dependencies"
+
+# Update package list and install dependencies
+sudo apt update
+sudo apt install -y curl software-properties-common
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install nodejs -y 
+sudo apt install git -y
+
+echo_message "* Installed Dependencies"
+
+echo_message "* Installing Files"
+
+# Create directory, clone repository, and install files
+mkdir -p Oversee
+cd Oversee || { echo_message "Failed to change directory to Oversee"; exit 1; }
+git clone https://github.com/hydren-dev/Oversee.git
+cd Oversee || { echo_message "Failed to change directory to Oversee"; exit 1; }
+npm install
+
+echo_message "* Installed Files"
+
+echo_message "* Starting Skyport"
+
+# Run setup scripts
+npm run seed
+npm run createUser 
+
+echo_message "* Starting Skyport With PM2"
+
+# Install panel and start the application
+sudo npm install -g pm2
+pm2 start index.js
+
+echo_message "* Skyport Installed and Started on Port 3001"
+
+# Set default user RAM to 2048 MB
+echo_message "* Setting default user RAM to 2048 MB"
+sudo sysctl -w vm.overcommit_memory=2
+sudo sysctl -w vm.overcommit_ratio=50
+
+# Get the number of terminal lines
+lines=$(tput lines)
+ascii_height=8  # Height of the ASCII art (manually counted)
+max_position=$((lines - ascii_height))  # Maximum position for the art
+
+# Ensure terminal height is sufficient
+if ((max_position <= 0)); then
+    echo "Terminal too small for animation."
+    exit 1
+fi
+
+# Function to clear the screen and print ASCII art at a specific position
+clear_and_print() {
+    clear
+    for ((i = 0; i < $1; i++)); do
+        echo
+    done
+    echo -e "$ascii_art"
+}
+
+# Up-down animation loop
+direction="down"
+position=0
+frame_time=0.016  # ~60 FPS (1/60 seconds)
+frames_per_move=6  # Slow down by updating position every 6 frames
+frame_counter=0
+
+# Track start time
+start_time=$(date +%s)
+
+while true; do
+    # Check elapsed time
+    elapsed_time=$(( $(date +%s) - start_time ))
+    if ((elapsed_time >= 5)); then
+        break
+    fi
+
+    # Display the ASCII art
+    clear_and_print "$position"
+
+    # Increment frame counter
+    ((frame_counter++))
+
+    # Update position only every frames_per_move frames
+    if ((frame_counter % frames_per_move == 0)); then
+        if [[ $direction == "down" ]]; then
+            ((position++))
+            if ((position >= max_position)); then
+                direction="up"
+            fi
+        else
+            ((position--))
+            if ((position <= 0)); then
+                direction="down"
+            fi
+        fi
+    fi
+
+    # Control the frame rate
+    sleep "$frame_time"
+done
+
+# Clear the screen after finishing
+clear
+echo "Made by ItzRavanOp"
